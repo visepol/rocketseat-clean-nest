@@ -22,5 +22,6 @@ import { Env } from 'src/env'
       },
     }),
   ],
+  providers: [JwtModule],
 })
 export class AuthModule {}
