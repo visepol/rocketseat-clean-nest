@@ -5,10 +5,12 @@ import {
   Body,
   ConflictException,
   UsePipes,
+  BadRequestException,
 } from '@nestjs/common'
 import { z } from 'zod'
 import { ZodValidationPipe } from '@/infra/http/pipes/zod-validation-pipe'
 import { RegisterStudentUseCase } from '@/domain/forum/application/use-cases/register-student'
+import { StudentAlreadyExistsError } from '@/domain/forum/application/use-cases/errors/student-already-exists-error'
 
 const createAccountBodySchema = z.object({
   name: z.string(),
@@ -35,7 +37,13 @@ export class CreateAccountController {
     })
 
     if (result.isLeft()) {
-      throw new ConflictException(result.value)
+      const error = result.value
+      switch (error.constructor) {
+        case StudentAlreadyExistsError:
+          throw new ConflictException(error.message)
+        default:
+          throw new BadRequestException(error.message)
+      }
     }
   }
 }
