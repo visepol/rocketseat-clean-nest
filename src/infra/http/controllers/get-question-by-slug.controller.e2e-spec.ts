@@ -1,4 +1,3 @@
-import { Question } from '@/domain/forum/enterprise/entities/question'
 import { Slug } from '@/domain/forum/enterprise/entities/values-objects/slug'
 import { AppModule } from '@/infra/app.module'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
