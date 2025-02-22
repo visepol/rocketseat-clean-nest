@@ -1,64 +1,50 @@
-import { AppModule } from '@/infra/app.module'
-import { DatabaseModule } from '@/infra/database/database.module'
-import { PrismaService } from '@/infra/database/prisma/prisma.service'
-import { INestApplication } from '@nestjs/common'
-import { JwtService } from '@nestjs/jwt'
-import { Test } from '@nestjs/testing'
-import request from 'supertest'
-import { QuestionFactory } from 'test/factories/make-question'
-import { StudentFactory } from 'test/factories/make-student'
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  HttpCode,
+  Param,
+  Put,
+} from '@nestjs/common'
+import { CurrentUser } from '@/infra/auth/current-user-decorator'
+import { UserPayload } from '@/infra/auth/jwt.strategy'
+import { ZodValidationPipe } from '@/infra/http/pipes/zod-validation-pipe'
+import { z } from 'zod'
+import { EditQuestionUseCase } from '@/domain/forum/application/use-cases/edit-question'
 
-describe('Edit question (E2E)', () => {
-  let app: INestApplication
-  let studentFactory: StudentFactory
-  let questionFactory: QuestionFactory
-  let prisma: PrismaService
-  let jwt: JwtService
-
-  beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, DatabaseModule],
-    }).compile()
-
-    app = moduleRef.createNestApplication()
-
-    studentFactory = moduleRef.get(StudentFactory)
-    prisma = moduleRef.get(PrismaService)
-    questionFactory = moduleRef.get(QuestionFactory)
-
-    jwt = moduleRef.get(JwtService)
-
-    await app.init()
-  })
-
-  test('[PUT] /questions/:id', async () => {
-    const user = await studentFactory.makePrismaStudent()
-
-    const acessToken = jwt.sign({ sub: user.id.toString() })
-
-    const question = await questionFactory.makePrismaQuestion({
-      authorId: user.id,
-    })
-
-    const questionId = question.id.toString()
-
-    const response = await request(app.getHttpServer())
-      .post(`/questions/${questionId}`)
-      .set('Authorization', `Bearer ${acessToken}`)
-      .send({
-        title: 'Sample title',
-        content: 'Sample content.',
-      })
-
-    expect(response.statusCode).toBe(201)
-
-    const questionOnDatabase = await prisma.question.findFirst({
-      where: {
-        title: 'Sample title',
-        content: 'Sample content.',
-      },
-    })
-
-    expect(questionOnDatabase).toBeTruthy()
-  })
+const editQuestionBodySchema = z.object({
+  title: z.string(),
+  content: z.string(),
 })
+
+const bodyValidationPipe = new ZodValidationPipe(editQuestionBodySchema)
+
+type EditQuestionBodySchema = z.infer<typeof editQuestionBodySchema>
+
+@Controller('/questions/:id')
+export class EditQuestionController {
+  constructor(private editQuestion: EditQuestionUseCase) {}
+
+  @Put()
+  @HttpCode(204)
+  async handle(
+    @Body(bodyValidationPipe) body: EditQuestionBodySchema,
+    @CurrentUser() user: UserPayload,
+    @Param('id') questionId: string,
+  ) {
+    const { title, content } = body
+    const userId = user.sub
+
+    const result = await this.editQuestion.execute({
+      title,
+      content,
+      authorId: userId,
+      attachmentsIds: [],
+      questionId,
+    })
+
+    if (result.isLeft()) {
+      throw new BadRequestException()
+    }
+  }
+}
